@@ -1,0 +1,123 @@
+---
+title: "Random Forest"
+author: "Diego Candela Salomón"
+date: "15/9/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+## Random Forest en h2o
+
+Random Forest es de los algoritmos más frecuentes en las competiciones de datos. Es un algoritmo agresivo capaz de detectar interacciones entre grandes conjuntos de variables.
+
+Debido al alto coste computacional que tiene Random Forest, se ha implementado h2o. H2o es una máquina virtual de Java especialiada en clusters de procesamiento paralelo para operaciones matemáticas 
+
+Los paquetes que se requieren para el cálculo son
+
+```
+library(h2o)
+library(randomForest)
+library(caret)
+library(bit64)
+```
+
+El grueso del proceso ocurre en los servidores de h2o una vez ya se ha configurado todo. Así pues importamos los datos con el mismo método que para el resto de algoritmos. Primero importamos el dataset de los datos previos a la partida. 
+
+```
+data_train         <- readRDS("./datosPreGame/data_train")
+data_test          <- readRDS("./datosPreGame/data_test")
+labels_data_train  <- readRDS("./datosPreGame/labels_train")
+labels_data_test   <- readRDS("./datosPreGame/labels_test")
+
+data_train <- cbind(labels_data_train, data_train)
+
+```
+Se ha de iniciar el cluster para conectar con h2o
+
+```
+h2o.init()
+
+```
+h2o requiere que los datos se codifiquen en su formato específico y no como un dataframe para realizar los cálculos. Esto será una constante durante el tiempo que utilicemos h2o. 
+
+Preparamos el modelo con los parámetros para el entrenamiento. Nótese que en el training_frame se ha de hacer la conversión a h2o:
+
+```
+rf_1 <-  h2o.randomForest(
+  x = colnames(data_train)[2:ncol(data_train)],
+  y = colnames(data_train)[1],
+  training_frame = as.h2o(data_train, use_datatable = T),
+  nfolds = 2,
+  mtries = 4,
+  ntrees = 500,
+  verbose= T
+)
+
+```
+Una vez obtenido el primer modelo eliminamos data_train y data_test para importar las versiones completas del dataset
+
+```
+data_train         <- readRDS("./datosCompleto/data_train")
+data_test          <- readRDS("./datosCompleto/data_test")
+
+data_train <- cbind(labels_data_train, data_train)
+```
+Volvemos a entrenar un modelo con los mismos parametros
+
+```
+rf_2 <-  h2o.randomForest(
+  x = colnames(data_train)[2:ncol(data_train)],
+  y = colnames(data_train)[1],
+  training_frame = as.h2o(data_train, use_datatable = T),
+  nfolds = 2,
+  mtries = 4,
+  ntrees = 500,
+  verbose= T
+)
+```
+Una vez tenemos entrenados los modelos, los almacenamos. El proceso de guardado difiere del método de captura de imágenes de RStudio y requiere de comandos específicos de h2o.
+
+```
+h2o.saveModel("./rf_1_preGame")
+h2o.saveModel("./rf_1_completo")
+```
+Posteriormente cargaremos los modelos para realizar las predicciones. Para ello hemos de volver a convertir del formato h2o al dataframe de R. 
+
+```
+modelo_cargado_1    <- h2o.loadModel(path = "./rf_1_Completo/DRF_model_R_1599602428198_249")
+predictions_2       <- h2o.predict(object = modelo_cargado_1,
+                             newdata = as.h2o(data_test, use_datatable = T))
+predicciones_bien_1 <- as.data.frame(predictions_2)
+
+rm(data_test)
+
+##  CARGAMOS EL SEGUNDO MODELO PARA PREDECIR. 
+data_test           <- readRDS("./datosPreGame/data_test")
+modelo_cargado_2    <- h2o.loadModel(path = "./rf_1_preGame/DRF_model_R_1599602428198_1")
+
+predictions_1       <- h2o.predict(object = modelo_cargado_2,
+                             newdata = as.h2o(data_test, use_datatable = T))
+predicciones_bien_2 <- as.data.frame(predictions_1)
+```
+Una vez hemos generado los dataframes de predicciones podemos proceder a realizar las matrices de confusión
+
+```
+probs1 <- as.data.frame(cbind(as.factor(labels_data_test), as.factor(predicciones_bien_1[,1])))
+probs2 <- as.data.frame(cbind(as.factor(labels_data_test), as.factor(predicciones_bien_2[,1])))
+
+probs1[,2] <- as.factor(probs1[,2])
+levels(probs1[,2]) <- c("0","1")
+
+probs2[,2] <- as.factor(probs2[,2])
+levels(probs2[,2]) <- c("0","1")
+
+
+matriz_confusion_1 <- confusionMatrix(data      = as.factor(probs1[,2]),
+                                      reference = labels_data_test)
+matriz_confusion_2 <- confusionMatrix(data      = as.factor(probs2[,2]),
+                                      reference = labels_data_test)
+```
+
+
+

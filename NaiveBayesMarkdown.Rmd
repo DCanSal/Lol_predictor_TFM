@@ -1,0 +1,121 @@
+---
+title: "Naïve-Bayes"
+author: "Diego Candela Salomón"
+date: "14/9/2020"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+##Naïve-Bayes
+
+Naïve-Bayes es uno de los algoritmos más sugeridos en la literatura para problemas de clasificación. El paquete caret dispone de una función para entrenar modelos de clasificación con este algoritmo.
+
+
+
+
+###Importar datos
+
+Dado que el formato de los datos se mantiene para los algoritmos, el proceso de importación es el mismo que hemos visto hasta ahora. Generaremos dos modelos a partir de sus correspondientes conjuntos de datos. Tras importar el conjunto de datos recogidos antes del comienzo de la partida, realizamos un cbind de las etiquetas de data_train con data_train
+
+```
+data_train         <- readRDS("./datosPreGame/data_train")
+data_test          <- readRDS("./datosPreGame/data_test")
+labels_data_train  <- readRDS("./datosPreGame/labels_train")
+labels_data_test   <- readRDS("./datosPreGame/labels_test")
+
+data_train <- cbind(labels_data_train, data_train)
+```
+
+Dada la cantidad de predictores que tiene el dataset y teniendo en cuenta que se encuentran en formato dummy, knn tiene problemas para generar un modelo cuando las variables tienen varianza próxima a cero. Para esto caret dispone de la función "nearZeroVar" que genera un índice de variables que cumplen estas característas para poder eliminarlas del dataset
+
+```
+indiceCerosTrain <- nearZeroVar(data_train)
+
+data_train       <- data_train[,-indiceCerosTrain]
+```
+###Preparando caret
+
+Una vez los datos están preparados para entrenar el modelo, preparamos los parámetros de caret para nb
+
+```
+#NAIVE BAYES
+model_1 <- train(labels_data_train~.,
+                 data_train,
+                 'nb',
+                 trControl = trainControl(method = 'cv', number=10))
+```
+Una vez se ha entrenado el modelo se ha de poner a prueba frente al data_test. Los resultados están expuestos en el documento principal de este proyecto.
+
+Primero aplicamos el mismo índice de la función "nearZeroVar" al set de testeo y luego utilizamos la función del paquete base de R "predict".
+
+Guardamos esas predicciones en un dataframe para generar la matriz de confusión con la función proporcionada por el paquete caret.
+
+```
+data_test <- cbind(labels_data_test, data_test)
+data_test <- data_test[,-indiceCerosTrain]
+data_test <- data_test[,-1]
+
+predictions  <- predict(model_1, data_test)
+predicciones <- as.data.frame(cbind(labels_data_test, predictions))
+
+confusion_matriz<- confusionMatrix(data=predictions, reference = labels_data_test)
+
+```
+Una vez hemos generado la matriz de confusión podemo proceder a realizar el cálculo del RMSE para la comparación de los modelos.
+
+```
+residuals_preGame <- as.numeric(labels_data_test) - as.numeric(predictions)
+RMSE_preGame      <- sqrt(mean(residuals_preGame^2))
+
+```
+Una vez tenemos el primer modelo, podemos proceder a eliminar los datasets del entorno de trabajo para importar los datasets completos y entrenar el segundo modelo
+
+```
+rm(data_train,data_test)
+
+data_train         <- readRDS("./datosCompleto/data_train")
+data_test          <- readRDS("./datosCompleto/data_test")
+
+data_train <- cbind(labels_data_train, data_train)
+
+```
+Repetimos el mismo proceso para generar el índice de variables con varianza cercanas a 0
+
+```
+indiceCerosTrain <- nearZeroVar(data_train)
+
+data_train       <- data_train[,-indiceCerosTrain]
+
+```
+Y podemos proceder a generar el segundo modelo con los mismos parámetros
+
+```
+model_2 <- train(labels_data_train~.,
+                 data_train,
+                 'nb',
+                 trControl = trainControl(method = 'cv', number=10))
+
+```
+Realizamos el mismo proceso para las predicciones, matriz de confusión y cálculo del RMSE
+
+```
+predictions  <- predict(knn_2, 
+                        newdata = data_test,
+                        k = 9,
+                        type = "prob", 
+                        prob=T)
+
+predicciones <- cbind(labels_data_test, predictions)
+
+predicciones <- as.data.frame(cbind(labels_data_test, predictions))
+
+probs1 <- aciertos_a_confusion(predicciones)
+
+matriz_confusion <- confusionMatrix(data      = as.factor(probs1[,4]),
+                                    reference = as.factor(probs1[,1]))
+
+residuals_completo <- as.numeric(labels_data_test) - as.numeric(probs1[,4])
+RMSE_completo      <- sqrt(mean(residuals_completo^2))
+
+```
